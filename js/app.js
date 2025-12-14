@@ -24,10 +24,12 @@
      Deletes the task with that ID for the given student.
 */
 
+
 // Configuration for this student (do not change STUDENT_ID value)
 const STUDENT_ID = "12217983";
 const API_KEY = "nYs43u5f1oGK9";
 const API_BASE = "https://portal.almasar101.com/assignment/api";
+
 
 // Grab elements from the DOM
 const form = document.getElementById("task-form");
@@ -39,6 +41,8 @@ const list = document.getElementById("task-list");
  * Helper to update status message.
  * You can use this in your code.
  */
+
+// Helper function to show status messages to the user
 function setStatus(message, isError = false) {
   if (!statusDiv) return;
   statusDiv.textContent = message || "";
@@ -55,8 +59,28 @@ function setStatus(message, isError = false) {
  *   - For each task, create an <li> with class "task-item"
  *     and append it to #task-list.
  */
+
+// Load all tasks from the server when the page loads
 document.addEventListener("DOMContentLoaded", function () {
   // TODO: implement load logic using fetch(...)
+  // Show loading message
+  setStatus("Loading tasks...");
+// Fetch tasks from the backend API
+
+  fetch(`${API_BASE}/get.php?stdid=${STUDENT_ID}&key=${API_KEY}`)
+    .then((res) => res.json())
+    .then((data) => {
+      list.innerHTML = "";// Clear the current task list
+
+      if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
+        data.tasks.forEach((task) => renderTask(task));// Render each task in the DOM
+        setStatus("Tasks loaded.");
+      } else {
+        setStatus("No tasks yet. Add a new task above!"); 
+      }
+    })
+    .catch(() => setStatus("Failed to fetch tasks", true));
+
 });
 
 /**
@@ -71,9 +95,32 @@ document.addEventListener("DOMContentLoaded", function () {
  *   - on success, add the new task to the DOM and clear the input.
  */
 if (form) {
+    // Handle form submission to add a new task
   form.addEventListener("submit", function (event) {
-    event.preventDefault();
+    event.preventDefault();// Prevent default form submission
     // TODO: implement add-task logic here
+     const title = input.value.trim();
+    if (!title) return;
+
+    setStatus("Adding task...");// Show adding task message
+
+    // Send POST request to add the new task
+    fetch(`${API_BASE}/add.php?stdid=${STUDENT_ID}&key=${API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.task) {
+          renderTask(data.task);// Add the new task to the DOM
+          input.value = "";
+          setStatus("Task added successfully.");
+        } else {
+          setStatus("Failed to add task", true);
+        }
+      })
+      .catch(() => setStatus("Error adding task", true));
   });
 }
 
@@ -92,7 +139,48 @@ if (form) {
  */
 
 // Suggested helper (you can modify it or make your own):
+
+// Render a single task and attach delete button functionality
 function renderTask(task) {
   // Expected task object fields: id, title, stdid, is_done, created_at (depends on API)
   // TODO: create the DOM elements and append them to list
+  const li = document.createElement("li");
+  li.className = "task-item";
+
+  const span = document.createElement("span");
+  span.className = "task-title";
+  span.textContent = task.title;
+
+  const btn = document.createElement("button");
+  btn.className = "task-delete";
+  btn.textContent = "Delete";
+
+  btn.addEventListener("click", function () {
+  deleteTask(task.id, li); // Call deleteTask on button click
+});
+
+// Append the task elements to the task list in DOM
+  li.appendChild(span);
+  li.appendChild(btn);
+  list.appendChild(li);
+}
+// Handle deleting a task from server & DOM
+function deleteTask(taskId, listItem) {
+  setStatus("Deleting...");
+
+  fetch(`${API_BASE}/delete.php?stdid=${STUDENT_ID}&key=${API_KEY}&id=${taskId}`)
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.success) {
+        listItem.remove();
+        setStatus("Task deleted.");
+      } else {
+        setStatus("Failed to delete task", true);
+        console.log("Delete error:", data);
+      }
+    })
+    .catch((err) => {
+      console.error("Network delete error:", err);
+      setStatus("Error deleting task", true);
+    });
 }
