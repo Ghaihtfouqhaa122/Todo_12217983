@@ -242,3 +242,11 @@ function deleteTask(taskId, listItem, deleteBtn) {
       deleteBtn.disabled = false;
     });
 }
+/*
+ Added features to make the site more efficient:
+ 1. Offline mode: disable input and Add button, grey style, show message
+ 2. Prevent empty task
+ 3. Prevent duplicate task
+ 4. Prevent double add and delete
+ 5. Show message if last task deleted
+*/
