@@ -30,19 +30,17 @@ const STUDENT_ID = "12217983";
 const API_KEY = "nYs43u5f1oGK9";
 const API_BASE = "https://portal.almasar101.com/assignment/api";
 
-
 // Grab elements from the DOM
 const form = document.getElementById("task-form");
 const input = document.getElementById("task-input");
 const statusDiv = document.getElementById("status");
 const list = document.getElementById("task-list");
+const addButton = document.getElementById("add-btn");
 
 /**
  * Helper to update status message.
  * You can use this in your code.
  */
-
-// Helper function to show status messages to the user
 function setStatus(message, isError = false) {
   if (!statusDiv) return;
   statusDiv.textContent = message || "";
@@ -58,29 +56,58 @@ function setStatus(message, isError = false) {
  *   - Loop over the "tasks" array (if it exists).
  *   - For each task, create an <li> with class "task-item"
  *     and append it to #task-list.
+ *
+ * ---------- Feature 1: Offline handling ----------
+ * Disable input and Add button, color gray, show message when offline
  */
+function updateNetworkStatus() {
+  if (!navigator.onLine) {
+    input.disabled = true;
+    addButton.disabled = true;
+
+    input.style.backgroundColor = "#e0e0e0";
+    input.style.color = "#888";
+    addButton.style.backgroundColor = "#bdbdbd";
+    addButton.style.color = "#666";
+
+    setStatus("No internet connection. Please check your network.", true);
+  } else {
+    input.disabled = false;
+    addButton.disabled = false;
+
+    input.style.backgroundColor = "";
+    input.style.color = "";
+    addButton.style.backgroundColor = "";
+    addButton.style.color = "";
+
+    setStatus("Connected.");
+  }
+}
+
+// Listen to network changes
+window.addEventListener("online", updateNetworkStatus);
+window.addEventListener("offline", updateNetworkStatus);
+
+// Call once on page load
+document.addEventListener("DOMContentLoaded", updateNetworkStatus);
 
 // Load all tasks from the server when the page loads
 document.addEventListener("DOMContentLoaded", function () {
-  // TODO: implement load logic using fetch(...)
-  // Show loading message
-  setStatus("Loading tasks...");
-// Fetch tasks from the backend API
+  if (!navigator.onLine) return;
 
+  setStatus("Loading tasks...");
   fetch(`${API_BASE}/get.php?stdid=${STUDENT_ID}&key=${API_KEY}`)
     .then((res) => res.json())
     .then((data) => {
-      list.innerHTML = "";// Clear the current task list
-
+      list.innerHTML = ""; // Clear the current task list
       if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
-        data.tasks.forEach((task) => renderTask(task));// Render each task in the DOM
+        data.tasks.forEach((task) => renderTask(task)); // Render each task in the DOM
         setStatus("Tasks loaded.");
       } else {
-        setStatus("No tasks yet. Add a new task above!"); 
+        setStatus("No tasks yet. Add a new task above!");
       }
     })
     .catch(() => setStatus("Failed to fetch tasks", true));
-
 });
 
 /**
@@ -93,18 +120,41 @@ document.addEventListener("DOMContentLoaded", function () {
  *     with headers "Content-Type: application/json"
  *     and body JSON: { title: "..." }
  *   - on success, add the new task to the DOM and clear the input.
+ *
+ * ---------- Feature 2: Prevent empty task ----------
+ * Show alert if input is empty or only spaces
+ *
+ * ---------- Feature 3: Prevent double add ----------
+ * Disable Add button until request finishes
+ *
+ * ---------- Feature 5: Prevent duplicate task ----------
+ * Check if same title already exists in DOM
  */
 if (form) {
-    // Handle form submission to add a new task
   form.addEventListener("submit", function (event) {
-    event.preventDefault();// Prevent default form submission
-    // TODO: implement add-task logic here
-     const title = input.value.trim();
-    if (!title) return;
+    event.preventDefault();
 
-    setStatus("Adding task...");// Show adding task message
+    if (!navigator.onLine) {
+      setStatus("Cannot add task while offline.", true);
+      return;
+    }
 
-    // Send POST request to add the new task
+    const title = input.value.trim();
+    if (!title) {
+      window.alert("Cannot add an empty task! Please enter some text.");
+      return;
+    }
+
+    // Check for duplicate task
+    const tasks = Array.from(list.querySelectorAll(".task-title")).map(t => t.textContent.trim());
+    if (tasks.includes(title)) {
+      window.alert("This task already exists! Please enter a different task.");
+      return;
+    }
+
+    addButton.disabled = true; // Prevent double add
+    setStatus("Adding task...");
+
     fetch(`${API_BASE}/add.php?stdid=${STUDENT_ID}&key=${API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,14 +163,17 @@ if (form) {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.task) {
-          renderTask(data.task);// Add the new task to the DOM
+          renderTask(data.task); // Add the new task to the DOM
           input.value = "";
           setStatus("Task added successfully.");
         } else {
           setStatus("Failed to add task", true);
         }
       })
-      .catch(() => setStatus("Error adding task", true));
+      .catch(() => setStatus("Error adding task", true))
+      .finally(() => {
+        if (navigator.onLine) addButton.disabled = false;
+      });
   });
 }
 
@@ -132,18 +185,13 @@ if (form) {
  *       API_BASE + "/delete.php?stdid=" + STUDENT_ID + "&key=" + API_KEY + "&id=" + TASK_ID
  *   - on success, remove that <li> from the DOM.
  *
- * You can create a helper function like "renderTask(task)" that:
- *   - Creates <li>, <span> for title, and a "Delete" <button>.
- *   - Attaches a click listener to the delete button.
- *   - Appends the <li> to #task-list.
+ * ---------- Feature 3: Prevent double delete ----------
+ * Disable Delete button until request finishes
+ *
+ * ---------- Feature 4: Show message when last task deleted ----------
+ * After last task removed, wait 1 second and show "No tasks yet. Add a new task above!"
  */
-
-// Suggested helper (you can modify it or make your own):
-
-// Render a single task and attach delete button functionality
 function renderTask(task) {
-  // Expected task object fields: id, title, stdid, is_done, created_at (depends on API)
-  // TODO: create the DOM elements and append them to list
   const li = document.createElement("li");
   li.className = "task-item";
 
@@ -156,16 +204,19 @@ function renderTask(task) {
   btn.textContent = "Delete";
 
   btn.addEventListener("click", function () {
-  deleteTask(task.id, li); // Call deleteTask on button click
-});
+    btn.disabled = true; // Prevent double delete
+    btn.style.cursor = "not-allowed";
+    deleteTask(task.id, li, btn);
+  });
 
-// Append the task elements to the task list in DOM
   li.appendChild(span);
   li.appendChild(btn);
   list.appendChild(li);
 }
-// Handle deleting a task from server & DOM
-function deleteTask(taskId, listItem) {
+
+function deleteTask(taskId, listItem, deleteBtn) {
+  if (!navigator.onLine) return;
+
   setStatus("Deleting...");
 
   fetch(`${API_BASE}/delete.php?stdid=${STUDENT_ID}&key=${API_KEY}&id=${taskId}`)
@@ -174,13 +225,20 @@ function deleteTask(taskId, listItem) {
       if (data.success) {
         listItem.remove();
         setStatus("Task deleted.");
+
+        // Feature 4: check if last task deleted
+        if (list.children.length === 0) {
+          setTimeout(() => {
+            setStatus("No tasks yet. Add a new task above!");
+          }, 1000);
+        }
       } else {
         setStatus("Failed to delete task", true);
-        console.log("Delete error:", data);
+        deleteBtn.disabled = false;
       }
     })
-    .catch((err) => {
-      console.error("Network delete error:", err);
+    .catch(() => {
       setStatus("Error deleting task", true);
+      deleteBtn.disabled = false;
     });
 }
